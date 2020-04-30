@@ -79,6 +79,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
     data_betas = []
     data_gender = []
     data_trans = []
+    data_fname = []
 
     for ds_name in datasets:
         npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
@@ -95,17 +96,19 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
                 continue
             N = len(cdata['poses'])
 
+            fname = hash(npz_fname.split('/')[-1].split('.')[0])  # hash filename to a unique integer 
             cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N),1)), int(keep_rate*0.8*N), replace=False)#removing first and last 10% of the data to avoid repetitive initial poses
-            if len(cdata_ids)<1: continue
+            if len(cdata_ids) < 1: continue
 
             data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
             data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
             data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
             data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
             data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+            data_fname.extend([fname for _ in cdata_ids])
 
     assert len(data_pose) != 0
-    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender)
+    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname)
 
     if splits:
         import math
@@ -123,12 +126,14 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
         data_betas = data_betas[split_start:split_end]
         data_trans = data_trans[split_start:split_end]
         data_gender = data_gender[split_start:split_end]
+        data_fname = data_fname[split_start:split_end]
 
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
     torch.save(torch.tensor(np.asarray(data_betas, np.float32)), out_posepath.replace('pose.pt', 'betas.pt'))
     torch.save(torch.tensor(np.asarray(data_trans, np.float32)), out_posepath.replace('pose.pt', 'trans.pt'))
     torch.save(torch.tensor(np.asarray(data_gender, np.int32)), out_posepath.replace('pose.pt', 'gender.pt'))
+    torch.save(torch.tensor(np.asarray(data_fname, np.int32)), out_posepath.replace('pose.pt', 'fname.pt'))
 
     return len(data_pose)
 
@@ -162,6 +167,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
     data_betas = []
     data_gender = []
     data_trans = []
+    data_fname = []
 
     for ds_name in datasets:
         npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
@@ -178,6 +184,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
                 continue
 
             N = len(cdata['poses'])
+            fname = hash(npz_fname.split('/')[-1].split('.')[0])  # hash filename to a unique integer 
             skip_step = int(float(cdata['mocap_framerate']) // downsample_rate)
             cdata_ids = list(range(int(0.1*N), int(0.9*N),1))  # removing first and last 10% of the data to avoid repetitive initial poses
             cdata_ids = cdata_ids[::skip_step]  # skip through certain frames to downsample origin sequences
@@ -189,9 +196,10 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
             data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
             data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
             data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+            data_fname.extend([fname for _ in cdata_ids])
 
     assert len(data_pose) > 0 and len(data_pose) % frame_len == 0
-    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender)
+    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname)
 
     if splits:
         import math
@@ -209,12 +217,14 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
         data_betas = data_betas[split_start:split_end]
         data_trans = data_trans[split_start:split_end]
         data_gender = data_gender[split_start:split_end]
+        data_fname = data_fname[split_start:split_end]
         
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
     torch.save(torch.tensor(np.asarray(data_betas, np.float32)), out_posepath.replace('pose.pt', 'betas.pt'))
     torch.save(torch.tensor(np.asarray(data_trans, np.float32)), out_posepath.replace('pose.pt', 'trans.pt'))
     torch.save(torch.tensor(np.asarray(data_gender, np.int32)), out_posepath.replace('pose.pt', 'gender.pt'))
+    torch.save(torch.tensor(np.asarray(data_fname, np.int32)), out_posepath.replace('pose.pt', 'fname.pt'))
 
     return len(data_pose)
 
@@ -318,6 +328,7 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, downsample_rat
 
 
     class AMASS_ROW(pytables.IsDescription):
+        fname = pytables.Int32Col(1) # 1-character String
         gender = pytables.Int16Col(1)  # 1-character String
         pose = pytables.Float32Col(52*3)  # float  (single-precision)
         dmpl = pytables.Float32Col(8)  # float  (single-precision)
