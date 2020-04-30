@@ -215,6 +215,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
         data_gender = data_gender[split_start:split_end]
         data_fname = data_fname[split_start:split_end]
     
+        assert len(data_fname) % frame_len == 0, f'data length ({len(data_fname)}) must proportion to the frame length ({frame_len})'
         logger(f'data length: {len(data_fname)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
         
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
