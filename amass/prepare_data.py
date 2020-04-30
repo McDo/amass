@@ -96,7 +96,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
                 continue
             N = len(cdata['poses'])
 
-            fname = hash(npz_fname.split('/')[-1].split('.')[0])  # hash filename to a unique integer 
+            fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
             cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N),1)), int(keep_rate*0.8*N), replace=False)#removing first and last 10% of the data to avoid repetitive initial poses
             if len(cdata_ids) < 1: continue
 
@@ -182,7 +182,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
                 continue
 
             N = len(cdata['poses'])
-            fname = hash(npz_fname.split('/')[-1].split('.')[0])  # hash filename to a unique integer 
+            fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
             skip_step = int(float(cdata['mocap_framerate']) // downsample_rate)
             cdata_ids = list(range(int(0.1*N), int(0.9*N),1))  # removing first and last 10% of the data to avoid repetitive initial poses
             cdata_ids = cdata_ids[::skip_step]  # skip through certain frames to downsample origin sequences
