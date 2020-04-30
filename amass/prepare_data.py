@@ -84,7 +84,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
     for ds_name in datasets:
         npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
         if splits:
-            logger(f'randomly selecting {".1f" % ((splits[1] - splits[0]) * 100)}% data points from {ds_name}.')
+            logger(f'randomly selecting {"%.1f" % ((splits[1] - splits[0]) * 100)}% data points from {ds_name}.')
         else:
             logger(f'randomly selecting data points from {ds_name}.')
 
@@ -113,13 +113,9 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
     if splits:
         import math
 
-        split_start = len(data_pose) * splits[0]
+        # split data
+        split_start = math.floor(len(data_pose) * splits[0])
         split_end = math.floor(len(data_pose) * splits[1])
-        if split_start == 0:
-            split_start = int(split_start)
-        else:
-            if split_start % 2 == 0: split_start = split_start + 1
-            else: split_start = math.ceil(split_start)
 
         data_pose = data_pose[split_start:split_end]
         data_dmpl = data_dmpl[split_start:split_end]
@@ -127,6 +123,8 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
         data_trans = data_trans[split_start:split_end]
         data_gender = data_gender[split_start:split_end]
         data_fname = data_fname[split_start:split_end]
+
+        logger(f'data length: {len(data_fname)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
 
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
@@ -204,20 +202,20 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
     if splits:
         import math
 
-        split_start = len(data_pose) * splits[0]
+        # split data while keep the length proportion to the frame_len
+        split_start = math.floor(len(data_pose) * splits[0])
+        split_start = int(split_start - split_start % frame_len)
         split_end = math.floor(len(data_pose) * splits[1])
-        if split_start == 0:
-            split_start = int(split_start)
-        else:
-            if split_start % 2 == 0: split_start = split_start + 1
-            else: split_start = math.ceil(split_start)
-
+        split_end = int(split_end - split_end % frame_len)
+        
         data_pose = data_pose[split_start:split_end]
         data_dmpl = data_dmpl[split_start:split_end]
         data_betas = data_betas[split_start:split_end]
         data_trans = data_trans[split_start:split_end]
         data_gender = data_gender[split_start:split_end]
         data_fname = data_fname[split_start:split_end]
+    
+        logger(f'data length: {len(data_fname)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
         
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
@@ -282,9 +280,11 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, downsample_rat
     # }
     if 'splits' in amass_splits.keys():
         import numbers
+        from functools import reduce
         splits = amass_splits['splits']
         _amass_splits = {}
         assert [isinstance(s, numbers.Number) for s in splits] == [True, True, True], "amass_splits['splits'] must be (number, number, number)"
+        assert reduce(lambda x, y: x+y, splits) <= 1., "sum of amass_splits['splits'] must equal or less than 1.0"
 
         for split_idx, split_name in enumerate(('train', 'vald', 'test')):
             # if there is a zero-split, skip through the dataset creation
