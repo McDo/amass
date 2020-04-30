@@ -19,7 +19,10 @@
 # Code Developed by:
 # Nima Ghorbani <https://nghorbani.github.io/>
 #
-# 2019.08.09
+# Add downsampling and single dataset spliting fetures by:
+# Do Lin <https://aidope.com>
+#
+# 2020.05.01
 
 import os
 import numpy as np
@@ -45,7 +48,7 @@ def remove_Zrot(pose):
     pose[:3] = euler2em(noZ).copy()
     return pose
 
-def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger = None, rnd_seed = 100, keep_rate = 0.01):
+def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=None, rnd_seed=100, keep_rate=0.01):
     '''
     Select random number of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -54,6 +57,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger = None, rnd_see
     :param datasets: the name of the dataset
     :param amass_dir: directory of downloaded amass npz files. should be in this structure: path/datasets/subjects/*_poses.npz
     :param out_posepath: the path for final pose.pt file
+    :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
     :param rnd_seed:
     :return: Number of datapoints dumped using out_poseth address pattern
@@ -78,7 +82,11 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger = None, rnd_see
 
     for ds_name in datasets:
         npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
-        logger('randomly selecting data points from %s.' % (ds_name))
+        if splits:
+            logger(f'randomly selecting {".1f" % ((splits[1] - splits[0]) * 100)}% data points from {ds_name}.')
+        else:
+            logger(f'randomly selecting data points from {ds_name}.')
+
         for npz_fname in tqdm(npz_fnames):
             try:
                 cdata = np.load(npz_fname)
@@ -97,7 +105,111 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger = None, rnd_see
             data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
 
     assert len(data_pose) != 0
+    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender)
 
+    if splits:
+        import math
+
+        split_start = len(data_pose) * splits[0]
+        split_end = math.floor(len(data_pose) * splits[1])
+        if split_start == 0:
+            split_start = int(split_start)
+        else:
+            if split_start % 2 == 0: split_start = split_start + 1
+            else: split_start = math.ceil(split_start)
+
+        data_pose = data_pose[split_start:split_end]
+        data_dmpl = data_dmpl[split_start:split_end]
+        data_betas = data_betas[split_start:split_end]
+        data_trans = data_trans[split_start:split_end]
+        data_gender = data_gender[split_start:split_end]
+
+    torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
+    torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
+    torch.save(torch.tensor(np.asarray(data_betas, np.float32)), out_posepath.replace('pose.pt', 'betas.pt'))
+    torch.save(torch.tensor(np.asarray(data_trans, np.float32)), out_posepath.replace('pose.pt', 'trans.pt'))
+    torch.save(torch.tensor(np.asarray(data_gender, np.int32)), out_posepath.replace('pose.pt', 'gender.pt'))
+
+    return len(data_pose)
+
+def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=None, downsample_rate=30., frame_len=16):
+    '''
+    Downsample given length of frames from central 80 percent of each mocap sequence
+    Save individual data features like pose and shape per frame in pytorch pt files
+    test set will have the extra field for original markers
+
+    :param datasets: the name of the dataset
+    :param amass_dir: directory of downloaded amass npz files. should be in this structure: path/datasets/subjects/*_poses.npz
+    :param out_posepath: the path for final pose.pt file
+    :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
+    :param logger: an instance of human_body_prior.tools.omni_tools.log2file
+    :param downsample_rate: frame rate to be down sampled
+    :param frame_len: number of frames per batch
+    :return: Number of datapoints dumped using out_poseth address pattern
+    '''
+    import glob
+
+    makepath(out_posepath, isfile=True)
+
+    if logger is None:
+        starttime = datetime.now().replace(microsecond=0)
+        log_name = datetime.strftime(starttime, '%Y%m%d_%H%M')
+        logger = log2file(out_posepath.replace('pose.pt', '%s.log' % (log_name)))
+        logger('Creating pytorch dataset at %s' % out_posepath)
+
+    data_pose = []
+    data_dmpl = []
+    data_betas = []
+    data_gender = []
+    data_trans = []
+
+    for ds_name in datasets:
+        npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
+        if splits:
+            logger(f'down sampling {"%.1f" % ((splits[1] - splits[0]) * 100)}% data points from {ds_name}.')
+        else:
+            logger(f'down sampling data points from {ds_name}.')
+
+        for npz_fname in tqdm(npz_fnames):
+            try:
+                cdata = np.load(npz_fname)
+            except:
+                logger('Could not read %s! skipping..'%npz_fname)
+                continue
+
+            N = len(cdata['poses'])
+            skip_step = int(float(cdata['mocap_framerate']) // downsample_rate)
+            cdata_ids = list(range(int(0.1*N), int(0.9*N),1))  # removing first and last 10% of the data to avoid repetitive initial poses
+            cdata_ids = cdata_ids[::skip_step]  # skip through certain frames to downsample origin sequences
+            cdata_ids = cdata_ids[:len(cdata_ids) - (len(cdata_ids) % frame_len)] # keep N*frame_len frames for training convenient
+            if len(cdata_ids) < 1: continue
+
+            data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+            data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+            data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+            data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+            data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+
+    assert len(data_pose) > 0 and len(data_pose) % frame_len == 0
+    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender)
+
+    if splits:
+        import math
+
+        split_start = len(data_pose) * splits[0]
+        split_end = math.floor(len(data_pose) * splits[1])
+        if split_start == 0:
+            split_start = int(split_start)
+        else:
+            if split_start % 2 == 0: split_start = split_start + 1
+            else: split_start = math.ceil(split_start)
+
+        data_pose = data_pose[split_start:split_end]
+        data_dmpl = data_dmpl[split_start:split_end]
+        data_betas = data_betas[split_start:split_end]
+        data_trans = data_trans[split_start:split_end]
+        data_gender = data_gender[split_start:split_end]
+        
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
     torch.save(torch.tensor(np.asarray(data_betas, np.float32)), out_posepath.replace('pose.pt', 'betas.pt'))
@@ -119,7 +231,7 @@ class AMASS_Augment(Dataset):
         self.dtype = dtype
 
     def __len__(self):
-       return len(self.ds['trans'])
+        return len(self.ds['trans'])
 
     def __getitem__(self, idx):
         return self.fetch_data(idx)
@@ -138,7 +250,7 @@ class AMASS_Augment(Dataset):
 
         return sample
 
-def prepare_amass(amass_splits, amass_dir, work_dir, logger=None):
+def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, downsample_rate=0., frame_len=0):
 
     if logger is None:
         starttime = datetime.now().replace(microsecond=0)
@@ -152,10 +264,55 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None):
 
     logger('Stage I: Fetch data from AMASS npz files')
 
-    for split_name, datasets in amass_splits.items():
-        outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
-        if os.path.exists(outpath): continue
-        dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger)
+    # split mode - split a single dataset into train/vald/test with specified proportions
+    # e.g.
+    # amass_splits = {
+    #       'dataset': 'HumanEva',
+    #       'splits': (.85, .05, .1)  # train, vald, test
+    # }
+    if 'splits' in amass_splits.keys():
+        import numbers
+        splits = amass_splits['splits']
+        _amass_splits = {}
+        assert [isinstance(s, numbers.Number) for s in splits] == [True, True, True], "amass_splits['splits'] must be (number, number, number)"
+
+        for split_idx, split_name in enumerate(('train', 'vald', 'test')):
+            # if there is a zero-split, skip through the dataset creation
+            if split_idx > 0 and splits[split_idx] == 0: continue
+
+            final_splits = (0., 1.)
+            outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
+            if os.path.exists(outpath): continue
+            if split_name is 'train': final_splits = (0., splits[0])
+            elif split_name is 'vald': final_splits = (splits[0], splits[0] + splits[1])
+            else: final_splits = (splits[0] + splits[1], splits[0] + splits[1] + splits[2])
+
+            # reconstruct amass_splits as normal mode for stage II and III
+            _amass_splits[split_name] = amass_splits['dataset']
+
+            if downsample_rate and frame_len:
+                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger)
+            else:
+                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger)
+        
+        # assigin the reconstructed amass_splits back after stage I compeletion
+        amass_splits = _amass_splits
+
+    # normal mode - using different datasets as train/vald/test
+    # e.g.
+    # amass_splits = {
+    #       'vald': ['HumanEva'],
+    #       'test': ['SSM_synced'],
+    #       'train': ['CMU']
+    # }
+    else:
+        for split_name, datasets in amass_splits.items():
+            outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
+            if os.path.exists(outpath): continue
+            if downsample_rate and frame_len:
+                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger)
+            else:
+                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger)
 
     logger('Stage II: augment the data and save into h5 files to be used in a cross framework scenario.')
 
