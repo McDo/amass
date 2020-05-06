@@ -59,7 +59,8 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
     :param out_posepath: the path for final pose.pt file
     :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
-    :param rnd_seed:
+    :param rnd_seed: random seed
+    :param frame_len: number of frames per batch, `rnd_seed` and `keep_rate` are disabled if set
     :return: Number of datapoints dumped using out_poseth address pattern
     '''
     import glob
@@ -92,12 +93,12 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
             try:
                 cdata = np.load(npz_fname)
             except:
-                logger('Could not read %s! skipping..'%npz_fname)
+                logger('Could not read %s! skipping..' % npz_fname)
                 continue
             N = len(cdata['poses'])
 
             fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
-            cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N),1)), int(keep_rate*0.8*N), replace=False)#removing first and last 10% of the data to avoid repetitive initial poses
+            cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N), 1)), int(keep_rate*0.8*N), replace=False) # removing first and last 10% of the data to avoid repetitive initial poses
             if len(cdata_ids) < 1: continue
 
             data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
@@ -135,7 +136,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
 
     return len(data_pose)
 
-def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=None, downsample_rate=30., frame_len=16):
+def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=None, frame_len=16, downsample_rate=None):
     '''
     Downsample given length of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -146,8 +147,8 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
     :param out_posepath: the path for final pose.pt file
     :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
-    :param downsample_rate: frame rate to be down sampled
     :param frame_len: number of frames per batch
+    :param downsample_rate: frame rate to be down sampled
     :return: Number of datapoints dumped using out_poseth address pattern
     '''
     import glob
@@ -178,14 +179,16 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
             try:
                 cdata = np.load(npz_fname)
             except:
-                logger('Could not read %s! skipping..'%npz_fname)
+                logger('Could not read %s! skipping..' % npz_fname)
                 continue
 
             N = len(cdata['poses'])
             fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
-            skip_step = int(float(cdata['mocap_framerate']) // downsample_rate)
-            cdata_ids = list(range(int(0.1*N), int(0.9*N),1))  # removing first and last 10% of the data to avoid repetitive initial poses
-            cdata_ids = cdata_ids[::skip_step]  # skip through certain frames to downsample origin sequences
+            cdata_ids = list(range(int(0.1*N), int(0.9*N), 1))  # removing first and last 10% of the data to avoid repetitive initial poses
+            if downsample_rate: 
+                skip_step = int(float(cdata['mocap_framerate']) // downsample_rate)
+                if skip_step == 0: skip_step = 1
+                cdata_ids = cdata_ids[::skip_step]  # skip through certain frames to downsample origin sequences
             cdata_ids = cdata_ids[:len(cdata_ids) - (len(cdata_ids) % frame_len)] # keep N*frame_len frames for training convenient
             if len(cdata_ids) < 1: continue
 
@@ -259,7 +262,7 @@ class AMASS_Augment(Dataset):
 
         return sample
 
-def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, downsample_rate=0., frame_len=0):
+def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, frame_len=None, downsample_rate=None):
 
     if logger is None:
         starttime = datetime.now().replace(microsecond=0)
@@ -301,8 +304,8 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, downsample_rat
             # reconstruct amass_splits as normal mode for stage II and III
             _amass_splits[split_name] = amass_splits['dataset']
 
-            if downsample_rate and frame_len:
-                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger)
+            if frame_len:
+                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger, frame_len=frame_len, downsample_rate=downsample_rate)
             else:
                 dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger)
         
