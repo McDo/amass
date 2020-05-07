@@ -48,7 +48,7 @@ def remove_Zrot(pose):
     pose[:3] = euler2em(noZ).copy()
     return pose
 
-def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=None, rnd_seed=100, keep_rate=0.01):
+def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, rnd_seed=100, keep_rate=0.01):
     '''
     Select random number of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -57,8 +57,9 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
     :param datasets: the name of the dataset
     :param amass_dir: directory of downloaded amass npz files. should be in this structure: path/datasets/subjects/*_poses.npz
     :param out_posepath: the path for final pose.pt file
-    :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
+    :param betas_range: variance of each beta
+    :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param rnd_seed: random seed
     :param frame_len: number of frames per batch, `rnd_seed` and `keep_rate` are disabled if set
     :return: Number of datapoints dumped using out_poseth address pattern
@@ -101,12 +102,23 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
             cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N), 1)), int(keep_rate*0.8*N), replace=False) # removing first and last 10% of the data to avoid repetitive initial poses
             if len(cdata_ids) < 1: continue
 
-            data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
-            data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
-            data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
-            data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
-            data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
-            data_fname.extend([fname for _ in cdata_ids])
+            if not 'None' in str(type(betas_range)):
+                for beta_delta in betas_range:
+                    cdata_betas = np.array(cdata['betas']).astype(np.float32)
+                    cdata_betas += beta_delta
+                    data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+                    data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+                    data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+                    data_betas.extend(np.repeat(cdata_betas[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                    data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+                    data_fname.extend([fname for _ in cdata_ids])
+            else:
+                data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+                data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+                data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+                data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+                data_fname.extend([fname for _ in cdata_ids])
 
     assert len(data_pose) != 0
     assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname)
@@ -136,7 +148,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=No
 
     return len(data_pose)
 
-def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, logger=None, frame_len=16, downsample_rate=None):
+def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, frame_len=16, downsample_rate=None):
     '''
     Downsample given length of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -145,8 +157,9 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
     :param datasets: the name of the dataset
     :param amass_dir: directory of downloaded amass npz files. should be in this structure: path/datasets/subjects/*_poses.npz
     :param out_posepath: the path for final pose.pt file
-    :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
+    :param betas_range: variance of each beta
+    :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param frame_len: number of frames per batch
     :param downsample_rate: frame rate to be down sampled
     :return: Number of datapoints dumped using out_poseth address pattern
@@ -192,12 +205,23 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, splits=None, log
             cdata_ids = cdata_ids[:len(cdata_ids) - (len(cdata_ids) % frame_len)] # keep N*frame_len frames for training convenient
             if len(cdata_ids) < 1: continue
 
-            data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
-            data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
-            data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
-            data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
-            data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
-            data_fname.extend([fname for _ in cdata_ids])
+            if not 'None' in str(type(betas_range)):
+                for beta_delta in betas_range:
+                    cdata_betas = np.array(cdata['betas']).astype(np.float32)
+                    cdata_betas += beta_delta
+                    data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+                    data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+                    data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+                    data_betas.extend(np.repeat(cdata_betas[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                    data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+                    data_fname.extend([fname for _ in cdata_ids])
+            else:
+                data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+                data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+                data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+                data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+                data_fname.extend([fname for _ in cdata_ids])
 
     assert len(data_pose) > 0 and len(data_pose) % frame_len == 0
     assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname)
@@ -262,7 +286,7 @@ class AMASS_Augment(Dataset):
 
         return sample
 
-def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, frame_len=None, downsample_rate=None):
+def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=None, frame_len=None, downsample_rate=None):
 
     if logger is None:
         starttime = datetime.now().replace(microsecond=0)
@@ -305,9 +329,9 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, frame_len=None
             _amass_splits[split_name] = amass_splits['dataset']
 
             if frame_len:
-                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger, frame_len=frame_len, downsample_rate=downsample_rate)
+                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, frame_len=frame_len, downsample_rate=downsample_rate)
             else:
-                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, splits=final_splits, logger=logger)
+                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits)
         
         # assigin the reconstructed amass_splits back after stage I compeletion
         amass_splits = _amass_splits
@@ -323,13 +347,12 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, frame_len=None
         for split_name, datasets in amass_splits.items():
             outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
             if os.path.exists(outpath): continue
-            if downsample_rate and frame_len:
-                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger)
+            if frame_len:
+                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, frame_len=frame_len, downsample_rate=downsample_rate)
             else:
-                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger)
+                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range)
 
     logger('Stage II: augment the data and save into h5 files to be used in a cross framework scenario.')
-
 
     class AMASS_ROW(pytables.IsDescription):
         fname = pytables.Int32Col(1) # 1-character String
