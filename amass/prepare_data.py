@@ -103,15 +103,14 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
             if len(cdata_ids) < 1: continue
 
             if not 'None' in str(type(betas_range)):
-                for beta_delta in betas_range:
+                for i, beta_delta in enumerate(betas_range):
                     cdata_betas = np.array(cdata['betas']).astype(np.float32)
-                    cdata_betas += beta_delta
                     data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
                     data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
                     data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
-                    data_betas.extend(np.repeat(cdata_betas[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                    data_betas.extend(np.repeat((cdata_betas + beta_delta)[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
                     data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
-                    data_fname.extend([fname for _ in cdata_ids])
+                    data_fname.extend([fname + i for _ in cdata_ids])
             else:
                 data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
                 data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
@@ -206,15 +205,14 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
             if len(cdata_ids) < 1: continue
 
             if not 'None' in str(type(betas_range)):
-                for beta_delta in betas_range:
+                for i, beta_delta in enumerate(betas_range):
                     cdata_betas = np.array(cdata['betas']).astype(np.float32)
-                    cdata_betas += beta_delta
                     data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
                     data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
                     data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
-                    data_betas.extend(np.repeat(cdata_betas[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                    data_betas.extend(np.repeat((cdata_betas + beta_delta)[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
                     data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
-                    data_fname.extend([fname for _ in cdata_ids])
+                    data_fname.extend([fname + i for _ in cdata_ids])
             else:
                 data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
                 data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
