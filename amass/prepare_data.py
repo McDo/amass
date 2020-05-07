@@ -48,7 +48,7 @@ def remove_Zrot(pose):
     pose[:3] = euler2em(noZ).copy()
     return pose
 
-def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, rnd_seed=100, keep_rate=0.01):
+def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, rnd_seed=100, keep_rate=0.01, max_len=None):
     '''
     Select random number of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -61,7 +61,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
     :param betas_range: variance of each beta
     :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param rnd_seed: random seed
-    :param frame_len: number of frames per batch, `rnd_seed` and `keep_rate` are disabled if set
+    :param max_len: max frame allowed
     :return: Number of datapoints dumped using out_poseth address pattern
     '''
     import glob
@@ -147,7 +147,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
 
     return len(data_pose)
 
-def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, frame_len=16, downsample_rate=None):
+def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, frame_len=16, max_len=None, downsample_rate=None):
     '''
     Downsample given length of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -160,6 +160,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
     :param betas_range: variance of each beta
     :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param frame_len: number of frames per batch
+    :param max_len: max frame allowed
     :param downsample_rate: frame rate to be down sampled
     :return: Number of datapoints dumped using out_poseth address pattern
     '''
@@ -202,6 +203,8 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                 if skip_step == 0: skip_step = 1
                 cdata_ids = cdata_ids[::skip_step]  # skip through certain frames to downsample origin sequences
             cdata_ids = cdata_ids[:len(cdata_ids) - (len(cdata_ids) % frame_len)] # keep N*frame_len frames for training convenient
+            if max_len:
+                cdata_ids = cdata_ids[:max_len]
             if len(cdata_ids) < 1: continue
 
             if not 'None' in str(type(betas_range)):
@@ -284,7 +287,7 @@ class AMASS_Augment(Dataset):
 
         return sample
 
-def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=None, frame_len=None, downsample_rate=None):
+def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=None, frame_len=None, max_len=None, downsample_rate=None):
 
     if logger is None:
         starttime = datetime.now().replace(microsecond=0)
@@ -327,9 +330,9 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=No
             _amass_splits[split_name] = amass_splits['dataset']
 
             if frame_len:
-                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, frame_len=frame_len, downsample_rate=downsample_rate)
+                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
             else:
-                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits)
+                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, max_len=max_len)
         
         # assigin the reconstructed amass_splits back after stage I compeletion
         amass_splits = _amass_splits
@@ -346,9 +349,9 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=No
             outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
             if os.path.exists(outpath): continue
             if frame_len:
-                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, frame_len=frame_len, downsample_rate=downsample_rate)
+                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
             else:
-                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range)
+                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, max_len=max_len)
 
     logger('Stage II: augment the data and save into h5 files to be used in a cross framework scenario.')
 
