@@ -82,6 +82,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
     data_gender = []
     data_trans = []
     data_fname = []
+    data_fid = []
 
     for ds_name in datasets:
         npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
@@ -90,7 +91,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
         else:
             logger(f'randomly selecting data points from {ds_name}.')
 
-        for npz_fname in tqdm(npz_fnames):
+        for dir_id, npz_fname in enumerate(tqdm(npz_fnames)):
             try:
                 cdata = np.load(npz_fname)
             except:
@@ -98,7 +99,8 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
                 continue
             N = len(cdata['poses'])
 
-            fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
+            # fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
+            fname = dir_id * 1000
             cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N), 1)), int(keep_rate*0.8*N), replace=False) # removing first and last 10% of the data to avoid repetitive initial poses
             if len(cdata_ids) < 1: continue
 
@@ -111,6 +113,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
                     data_betas.extend(np.repeat((cdata_betas + beta_delta)[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
                     data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
                     data_fname.extend([fname + i for _ in cdata_ids])
+                    data_fid.extend([ii for ii, _ in enumerate(cdata_ids)])
             else:
                 data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
                 data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
@@ -118,9 +121,10 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
                 data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
                 data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
                 data_fname.extend([fname for _ in cdata_ids])
+                data_fid.extend([i for i, _ in enumerate(cdata_ids)])
 
     assert len(data_pose) != 0
-    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname)
+    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname) == len(data_fid)
 
     if splits:
         import math
@@ -135,8 +139,10 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
         data_trans = data_trans[split_start:split_end]
         data_gender = data_gender[split_start:split_end]
         data_fname = data_fname[split_start:split_end]
+        data_fid = data_fid[split_start:split_end]
 
-        logger(f'data length: {len(data_fname)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
+        assert len(data_pose) > 0
+        logger(f'data length: {len(data_pose)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
 
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
@@ -144,6 +150,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
     torch.save(torch.tensor(np.asarray(data_trans, np.float32)), out_posepath.replace('pose.pt', 'trans.pt'))
     torch.save(torch.tensor(np.asarray(data_gender, np.int32)), out_posepath.replace('pose.pt', 'gender.pt'))
     torch.save(torch.tensor(np.asarray(data_fname, np.int32)), out_posepath.replace('pose.pt', 'fname.pt'))
+    torch.save(torch.tensor(np.asarray(data_fid, np.int32)), out_posepath.replace('pose.pt', 'fid.pt'))
 
     return len(data_pose)
 
@@ -180,6 +187,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
     data_gender = []
     data_trans = []
     data_fname = []
+    data_fid = []
 
     for ds_name in datasets:
         npz_fnames = glob.glob(os.path.join(amass_dir, ds_name, '*/*_poses.npz'))
@@ -188,7 +196,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
         else:
             logger(f'down sampling data points from {ds_name}.')
 
-        for npz_fname in tqdm(npz_fnames):
+        for dir_id, npz_fname in enumerate(tqdm(npz_fnames)):
             try:
                 cdata = np.load(npz_fname)
             except:
@@ -196,7 +204,8 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                 continue
 
             N = len(cdata['poses'])
-            fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
+            # fname = abs(hash(npz_fname.split('/')[-1].split('.')[0])) % (10 ** 8) # hash filename to a unique positive 8-digits integer 
+            fname = dir_id * 1000
             cdata_ids = list(range(int(0.1*N), int(0.9*N), 1))  # removing first and last 10% of the data to avoid repetitive initial poses
             if downsample_rate: 
                 skip_step = int(float(cdata['mocap_framerate']) // downsample_rate)
@@ -216,6 +225,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                     data_betas.extend(np.repeat((cdata_betas + beta_delta)[np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
                     data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
                     data_fname.extend([fname + i for _ in cdata_ids])
+                    data_fid.extend([ii for ii, _ in enumerate(cdata_ids)])
             else:
                 data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
                 data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
@@ -223,9 +233,10 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                 data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
                 data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
                 data_fname.extend([fname for _ in cdata_ids])
+                data_fid.extend([i for i, _ in enumerate(cdata_ids)])
 
     assert len(data_pose) > 0 and len(data_pose) % frame_len == 0
-    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname)
+    assert len(data_pose) == len(data_dmpl) == len(data_betas) == len(data_trans) == len(data_gender) == len(data_fname) == len(data_fid)
 
     if splits:
         import math
@@ -242,9 +253,11 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
         data_trans = data_trans[split_start:split_end]
         data_gender = data_gender[split_start:split_end]
         data_fname = data_fname[split_start:split_end]
+        data_fid = data_fid[split_start:split_end]
     
-        assert len(data_fname) % frame_len == 0, f'data length ({len(data_fname)}) must proportion to the frame length ({frame_len})'
-        logger(f'data length: {len(data_fname)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
+        assert len(data_pose) > 0
+        assert len(data_pose) % frame_len == 0, f'data length ({len(data_pose)}) must proportion to the frame length ({frame_len})'
+        logger(f'data length: {len(data_pose)}, parsing from proportion ({"%.1f" % splits[0]}, {"%.1f" % splits[1]}) to index ({split_start}, {split_end})\n\n')
         
     torch.save(torch.tensor(np.asarray(data_pose, np.float32)), out_posepath)
     torch.save(torch.tensor(np.asarray(data_dmpl, np.float32)), out_posepath.replace('pose.pt', 'dmpl.pt'))
@@ -252,6 +265,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
     torch.save(torch.tensor(np.asarray(data_trans, np.float32)), out_posepath.replace('pose.pt', 'trans.pt'))
     torch.save(torch.tensor(np.asarray(data_gender, np.int32)), out_posepath.replace('pose.pt', 'gender.pt'))
     torch.save(torch.tensor(np.asarray(data_fname, np.int32)), out_posepath.replace('pose.pt', 'fname.pt'))
+    torch.save(torch.tensor(np.asarray(data_fid, np.int32)), out_posepath.replace('pose.pt', 'fid.pt'))
 
     return len(data_pose)
 
@@ -321,13 +335,12 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=No
 
             final_splits = (0., 1.)
             outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
+            # reconstruct amass_splits as normal mode for stage II and III
+            _amass_splits[split_name] = amass_splits['dataset']
             if os.path.exists(outpath): continue
             if split_name is 'train': final_splits = (0., splits[0])
             elif split_name is 'vald': final_splits = (splits[0], splits[0] + splits[1])
             else: final_splits = (splits[0] + splits[1], splits[0] + splits[1] + splits[2])
-
-            # reconstruct amass_splits as normal mode for stage II and III
-            _amass_splits[split_name] = amass_splits['dataset']
 
             if frame_len:
                 downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
@@ -356,6 +369,7 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=No
     logger('Stage II: augment the data and save into h5 files to be used in a cross framework scenario.')
 
     class AMASS_ROW(pytables.IsDescription):
+        fid = pytables.Int16Col(1) # 1-character String
         fname = pytables.Int32Col(1) # 1-character String
         gender = pytables.Int16Col(1)  # 1-character String
         pose = pytables.Float32Col(52*3)  # float  (single-precision)
