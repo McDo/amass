@@ -48,6 +48,37 @@ def remove_Zrot(pose):
     pose[:3] = euler2em(noZ).copy()
     return pose
 
+def betas_range_sample(betas_range, beta, beta_ln):
+    beta_range = np.zeros(betas_range)
+    beta_rn = betas_range - beta_ln
+    if beta_ln != 0:
+        if beta_rn != 0: 
+            # beta1 left range step
+            beta_ls = (2 + beta) / beta_ln
+            # beta1 right range step
+            beta_rs = (2 - beta) / beta_rn
+            beta_range[:beta_ln] = np.arange(-2., beta, beta_ls)
+            beta_range[beta_ln:] = np.arange(beta, 2., beta_rs)
+            # beta_range[0] <- (beta_range[0] + beta_range[1]) / 2. to avoid too many -2s
+            beta_range[0] = np.average(beta_range[:2])
+        else: 
+            # beta1 left range step
+            beta_ls = (2 + beta) / (beta_ln - 1)
+            beta_range = np.arange(-2., beta + beta_ls, beta_ls)
+            # beta_range[0] <- (beta_range[0] + beta_range[1]) / 2. to avoid too many -2s
+            beta_range[0] = np.average(beta_range[:2])
+    else:
+        if beta_rn != 0: 
+            # beta1 right range step
+            beta_rs = (2 - beta) / beta_rn
+            beta_range = np.arange(beta, 2, beta_rs)
+        else:
+            raise ValueError('failed to generate beta range')
+
+    beta_range -= beta
+    np.random.shuffle(beta_range)
+    return beta_range
+
 def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, rnd_seed=100, keep_rate=0.01, max_len=None):
     '''
     Select random number of frames from central 80 percent of each mocap sequence
@@ -104,7 +135,38 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
             cdata_ids = np.random.choice(list(range(int(0.1*N), int(0.9*N), 1)), int(keep_rate*0.8*N), replace=False) # removing first and last 10% of the data to avoid repetitive initial poses
             if len(cdata_ids) < 1: continue
 
-            if not 'None' in str(type(betas_range)):
+            if 'int' in str(type(betas_range)) or 'numpy.ndarray' in str(type(betas_range)):
+                if 'int' in str(type(betas_range)):
+                    if betas_range == 0:
+                        data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+                        data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+                        data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+                        data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                        data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+                        data_fname.extend([fname for _ in cdata_ids])
+                        data_fid.extend([i for i, _ in enumerate(cdata_ids)])
+                    else:
+                        assert betas_range % 2 == 0, ValueError('betas_range should be multiple to 2')
+                        # if `betas_range` is an integer, 
+                        # sample the number of betas1 and betas2 
+                        # that varience from -2. to 2. as follows:
+                        beta1, beta2 = cdata['betas'][0], cdata['betas'][1]
+                        # left range, right range
+                        beta1_lr, beta1_rr = max(0., 2. + beta1), max(0., 2. - beta1)
+                        beta2_lr, beta2_rr = max(0., 2. + beta2), max(0., 2. - beta2)
+                        # left range percentage, right range percentage
+                        beta1_lp, beta1_rp = beta1_lr / (beta1_lr + beta1_rr),  beta1_rr / (beta1_lr + beta1_rr)
+                        beta2_lp, beta2_rp = beta2_lr / (beta2_lr + beta2_rr),  beta2_rr / (beta2_lr + beta2_rr)
+                        # left range sample number
+                        beta1_ln, beta2_ln = int(betas_range * beta1_lp), int(betas_range * beta2_lp)
+                        # do sampling for beta1 range
+                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln)
+                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln)
+                        # reconstruct beatas_range as numpy.ndarray
+                        betas_range = np.zeros((betas_range, len(cdata['betas'])))
+                        betas_range[:, 1] = beta1_range
+                        betas_range[:, 2] = beta2_range
+
                 for i, beta_delta in enumerate(betas_range):
                     cdata_betas = np.array(cdata['betas']).astype(np.float32)
                     data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
@@ -216,7 +278,38 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                 cdata_ids = cdata_ids[:max_len]
             if len(cdata_ids) < 1: continue
 
-            if not 'None' in str(type(betas_range)):
+            if 'int' in str(type(betas_range)) or 'numpy.ndarray' in str(type(betas_range)):
+                if 'int' in str(type(betas_range)):
+                    if betas_range == 0:
+                        data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
+                        data_dmpl.extend(cdata['dmpls'][cdata_ids].astype(np.float32))
+                        data_trans.extend(cdata['trans'][cdata_ids].astype(np.float32))
+                        data_betas.extend(np.repeat(cdata['betas'][np.newaxis].astype(np.float32), repeats=len(cdata_ids), axis=0))
+                        data_gender.extend([gdr2num[str(cdata['gender'].astype(np.str))] for _ in cdata_ids])
+                        data_fname.extend([fname for _ in cdata_ids])
+                        data_fid.extend([i for i, _ in enumerate(cdata_ids)])
+                    else:
+                        assert betas_range % 2 == 0, ValueError('betas_range should be multiple to 2')
+                        # if `betas_range` is an integer, 
+                        # sample the number of betas1 and betas2 
+                        # that varience from -2. to 2. as follows:
+                        beta1, beta2 = cdata['betas'][0], cdata['betas'][1]
+                        # left range, right range
+                        beta1_lr, beta1_rr = max(0., 2. + beta1), max(0., 2. - beta1)
+                        beta2_lr, beta2_rr = max(0., 2. + beta2), max(0., 2. - beta2)
+                        # left range percentage, right range percentage
+                        beta1_lp, beta1_rp = beta1_lr / (beta1_lr + beta1_rr),  beta1_rr / (beta1_lr + beta1_rr)
+                        beta2_lp, beta2_rp = beta2_lr / (beta2_lr + beta2_rr),  beta2_rr / (beta2_lr + beta2_rr)
+                        # left range sample number
+                        beta1_ln, beta2_ln = int(betas_range * beta1_lp), int(betas_range * beta2_lp)
+                        # do sampling for beta1 range
+                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln)
+                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln)
+                        # reconstruct beatas_range as numpy.ndarray
+                        betas_range = np.zeros((betas_range, len(cdata['betas'])))
+                        betas_range[:, 1] = beta1_range
+                        betas_range[:, 2] = beta2_range
+
                 for i, beta_delta in enumerate(betas_range):
                     cdata_betas = np.array(cdata['betas']).astype(np.float32)
                     data_pose.extend(cdata['poses'][cdata_ids].astype(np.float32))
