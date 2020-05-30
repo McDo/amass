@@ -59,14 +59,10 @@ def betas_range_sample(betas_range, beta, beta_ln, beta_lim):
             beta_rs = (beta_lim - beta) / beta_rn
             beta_range[:beta_ln] = np.arange(-beta_lim, beta, beta_ls)
             beta_range[beta_ln:] = np.arange(beta, beta_lim, beta_rs)
-            # beta_range[0] <- (beta_range[0] + beta_range[1]) / 2. to avoid too many -2s
-            beta_range[0] = np.average(beta_range[:2])
         else: 
             # beta1 left range step
             beta_ls = (beta_lim + beta) / (beta_ln - 1)
             beta_range = np.arange(-beta_lim, beta + beta_ls, beta_ls)
-            # beta_range[0] <- (beta_range[0] + beta_range[1]) / 2. to avoid too many -2s
-            beta_range[0] = np.average(beta_range[:2])
     else:
         if beta_rn != 0: 
             # beta1 right range step
@@ -74,6 +70,13 @@ def betas_range_sample(betas_range, beta, beta_ln, beta_lim):
             beta_range = np.arange(beta, beta_lim, beta_rs)
         else:
             raise ValueError('failed to generate beta range')
+
+    # beta_range[0] <- (beta_range[0] + beta_range[1]) / 2. to avoid too many -beta_lims
+    if float(beta_range[0]) == float(-beta_lim) and float(beta) != float(-beta_lim): 
+        beta_range[0] = np.average(beta_range[:2])
+    # beta_range[-1] <- (beta_range[-1] + beta_range[-2]) / 2. to avoid too many beta_lims
+    if float(beta_range[-1]) == float(beta_lim) and float(beta) != float(beta_lim): 
+        beta_range[-1] = np.average(beta_range[-2:])
 
     beta_range -= beta
     np.random.shuffle(beta_range)
