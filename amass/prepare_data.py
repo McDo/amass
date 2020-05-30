@@ -147,21 +147,22 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
                         data_fid.extend([i for i, _ in enumerate(cdata_ids)])
                     else:
                         assert betas_range % 2 == 0, ValueError('betas_range should be multiple to 2')
+                        lim = 2.
                         # if `betas_range` is an integer, 
                         # sample the number of betas1 and betas2 
                         # that varience from -2. to 2. as follows:
                         beta1, beta2 = cdata['betas'][0], cdata['betas'][1]
                         # left range, right range
-                        beta1_lr, beta1_rr = max(0., 2. + beta1), max(0., 2. - beta1)
-                        beta2_lr, beta2_rr = max(0., 2. + beta2), max(0., 2. - beta2)
+                        beta1_lr, beta1_rr = max(0., lim + beta1), max(0., lim - beta1)
+                        beta2_lr, beta2_rr = max(0., lim + beta2), max(0., lim - beta2)
                         # left range percentage, right range percentage
                         beta1_lp, beta1_rp = beta1_lr / (beta1_lr + beta1_rr),  beta1_rr / (beta1_lr + beta1_rr)
                         beta2_lp, beta2_rp = beta2_lr / (beta2_lr + beta2_rr),  beta2_rr / (beta2_lr + beta2_rr)
                         # left range sample number
                         beta1_ln, beta2_ln = int(betas_range * beta1_lp), int(betas_range * beta2_lp)
                         # do sampling for beta1 range
-                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, 2.)
-                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, 2.)
+                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, lim)
+                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, lim)
                         # reconstruct beatas_range as numpy.ndarray
                         betas_range = np.zeros((betas_range, len(cdata['betas'])))
                         betas_range[:, 0] = beta1_range
@@ -290,21 +291,22 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                         data_fid.extend([i for i, _ in enumerate(cdata_ids)])
                     else:
                         assert betas_range % 2 == 0, ValueError('betas_range should be multiple to 2')
+                        lim = 2.
                         # if `betas_range` is an integer, 
                         # sample the number of betas1 and betas2 
                         # that varience from -2. to 2. as follows:
                         beta1, beta2 = cdata['betas'][0], cdata['betas'][1]
                         # left range, right range
-                        beta1_lr, beta1_rr = max(0., 2. + beta1), max(0., 2. - beta1)
-                        beta2_lr, beta2_rr = max(0., 2. + beta2), max(0., 2. - beta2)
+                        beta1_lr, beta1_rr = max(0., lim + beta1), max(0., lim - beta1)
+                        beta2_lr, beta2_rr = max(0., lim + beta2), max(0., lim - beta2)
                         # left range percentage, right range percentage
                         beta1_lp, beta1_rp = beta1_lr / (beta1_lr + beta1_rr),  beta1_rr / (beta1_lr + beta1_rr)
                         beta2_lp, beta2_rp = beta2_lr / (beta2_lr + beta2_rr),  beta2_rr / (beta2_lr + beta2_rr)
                         # left range sample number
                         beta1_ln, beta2_ln = int(betas_range * beta1_lp), int(betas_range * beta2_lp)
                         # do sampling for beta1 range
-                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, 2.)
-                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, 2.)
+                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, lim)
+                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, lim)
                         # reconstruct beatas_range as numpy.ndarray
                         betas_range = np.zeros((betas_range, len(cdata['betas'])))
                         betas_range[:, 0] = beta1_range
