@@ -79,7 +79,7 @@ def betas_range_sample(betas_range, beta, beta_ln, beta_lim):
     np.random.shuffle(beta_range)
     return beta_range
 
-def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, rnd_seed=100, keep_rate=0.01, max_len=None):
+def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, betas_limit=None, splits=None, rnd_seed=100, keep_rate=0.01, max_len=None):
     '''
     Select random number of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -90,6 +90,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
     :param out_posepath: the path for final pose.pt file
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
     :param betas_range: variance of each beta
+    :param betas_limit: betas variance ranging from -betas_limit to betas_limit. only works with integer betas_range
     :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param rnd_seed: random seed
     :param max_len: max frame allowed
@@ -147,22 +148,22 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
                         data_fid.extend([i for i, _ in enumerate(cdata_ids)])
                     else:
                         assert betas_range % 2 == 0, ValueError('betas_range should be multiple to 2')
-                        lim = 2.
+                        if betas_limit is None: betas_limit = 2.
                         # if `betas_range` is an integer, 
                         # sample the number of betas1 and betas2 
                         # that varience from -2. to 2. as follows:
                         beta1, beta2 = cdata['betas'][0], cdata['betas'][1]
                         # left range, right range
-                        beta1_lr, beta1_rr = max(0., lim + beta1), max(0., lim - beta1)
-                        beta2_lr, beta2_rr = max(0., lim + beta2), max(0., lim - beta2)
+                        beta1_lr, beta1_rr = max(0., betas_limit + beta1), max(0., betas_limit - beta1)
+                        beta2_lr, beta2_rr = max(0., betas_limit + beta2), max(0., betas_limit - beta2)
                         # left range percentage, right range percentage
                         beta1_lp, beta1_rp = beta1_lr / (beta1_lr + beta1_rr),  beta1_rr / (beta1_lr + beta1_rr)
                         beta2_lp, beta2_rp = beta2_lr / (beta2_lr + beta2_rr),  beta2_rr / (beta2_lr + beta2_rr)
                         # left range sample number
                         beta1_ln, beta2_ln = int(betas_range * beta1_lp), int(betas_range * beta2_lp)
                         # do sampling for beta1 range
-                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, lim)
-                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, lim)
+                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, betas_limit)
+                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, betas_limit)
                         # reconstruct beatas_range as numpy.ndarray
                         betas_range = np.zeros((betas_range, len(cdata['betas'])))
                         betas_range[:, 0] = beta1_range
@@ -217,7 +218,7 @@ def dump_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_ran
 
     return len(data_pose)
 
-def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, splits=None, frame_len=16, max_len=None, downsample_rate=None):
+def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, betas_range=None, betas_limit=None, splits=None, frame_len=16, max_len=None, downsample_rate=None):
     '''
     Downsample given length of frames from central 80 percent of each mocap sequence
     Save individual data features like pose and shape per frame in pytorch pt files
@@ -228,6 +229,7 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
     :param out_posepath: the path for final pose.pt file
     :param logger: an instance of human_body_prior.tools.omni_tools.log2file
     :param betas_range: variance of each beta
+    :param betas_limit: betas variance ranging from -betas_limit to betas_limit. only works with integer betas_range
     :param splits: (splits_start, splits_end), e.g. (.85, .90) means splits 5% of the dataset starts from 85%
     :param frame_len: number of frames per batch
     :param max_len: max frame allowed
@@ -291,22 +293,22 @@ def downsample_amass2pytroch(datasets, amass_dir, out_posepath, logger=None, bet
                         data_fid.extend([i for i, _ in enumerate(cdata_ids)])
                     else:
                         assert betas_range % 2 == 0, ValueError('betas_range should be multiple to 2')
-                        lim = 2.
+                        if betas_limit is None: betas_limit = 2.
                         # if `betas_range` is an integer, 
                         # sample the number of betas1 and betas2 
                         # that varience from -2. to 2. as follows:
                         beta1, beta2 = cdata['betas'][0], cdata['betas'][1]
                         # left range, right range
-                        beta1_lr, beta1_rr = max(0., lim + beta1), max(0., lim - beta1)
-                        beta2_lr, beta2_rr = max(0., lim + beta2), max(0., lim - beta2)
+                        beta1_lr, beta1_rr = max(0., betas_limit + beta1), max(0., betas_limit - beta1)
+                        beta2_lr, beta2_rr = max(0., betas_limit + beta2), max(0., betas_limit - beta2)
                         # left range percentage, right range percentage
                         beta1_lp, beta1_rp = beta1_lr / (beta1_lr + beta1_rr),  beta1_rr / (beta1_lr + beta1_rr)
                         beta2_lp, beta2_rp = beta2_lr / (beta2_lr + beta2_rr),  beta2_rr / (beta2_lr + beta2_rr)
                         # left range sample number
                         beta1_ln, beta2_ln = int(betas_range * beta1_lp), int(betas_range * beta2_lp)
                         # do sampling for beta1 range
-                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, lim)
-                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, lim)
+                        beta1_range = betas_range_sample(betas_range, beta1, beta1_ln, betas_limit)
+                        beta2_range = betas_range_sample(betas_range, beta2, beta2_ln, betas_limit)
                         # reconstruct beatas_range as numpy.ndarray
                         betas_range = np.zeros((betas_range, len(cdata['betas'])))
                         betas_range[:, 0] = beta1_range
@@ -396,7 +398,7 @@ class AMASS_Augment(Dataset):
 
         return sample
 
-def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=None, frame_len=None, max_len=None, downsample_rate=None):
+def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=None, betas_limit=None, frame_len=None, max_len=None, downsample_rate=None):
 
     if logger is None:
         starttime = datetime.now().replace(microsecond=0)
@@ -438,9 +440,9 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=No
             else: final_splits = (splits[0] + splits[1], splits[0] + splits[1] + splits[2])
 
             if frame_len:
-                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
+                downsample_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, betas_limit=betas_limit, splits=final_splits, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
             else:
-                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, splits=final_splits, max_len=max_len)
+                dump_amass2pytroch(amass_splits['dataset'], amass_dir, outpath, logger=logger, betas_range=betas_range, betas_limit=betas_limit, splits=final_splits, max_len=max_len)
         
         # assigin the reconstructed amass_splits back after stage I compeletion
         amass_splits = _amass_splits
@@ -457,9 +459,9 @@ def prepare_amass(amass_splits, amass_dir, work_dir, logger=None, betas_range=No
             outpath = makepath(os.path.join(stageI_outdir, split_name, 'pose.pt'), isfile=True)
             if os.path.exists(outpath): continue
             if frame_len:
-                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
+                downsample_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, betas_limit=betas_limit, frame_len=frame_len, max_len=max_len, downsample_rate=downsample_rate)
             else:
-                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, max_len=max_len)
+                dump_amass2pytroch(datasets, amass_dir, outpath, logger=logger, betas_range=betas_range, betas_limit=betas_limit, max_len=max_len)
 
     logger('Stage II: augment the data and save into h5 files to be used in a cross framework scenario.')
 
